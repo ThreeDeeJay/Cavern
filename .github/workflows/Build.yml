@@ -36,6 +36,12 @@ jobs:
         msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} "Cavern.sln"
         msbuild /m /p:Configuration=${{env.BUILD_CONFIGURATION}} "Cavern.Format/Cavern.Format.csproj"
 
+    - name: Download base build
+      shell: powershell
+      run: |
+        Invoke-WebRequest -Method Get -Uri https://cavern.sbence.hu/index.php?t=115&dl=cavern64 -OutFile build/Release.zip -UseBasicParsing
+        7z x build/Release.zip
+
     - name: Collect artifacts
       working-directory: ${{env.GITHUB_WORKSPACE}}
       run: |
@@ -51,6 +57,7 @@ jobs:
       with:
         name: "cavern64"
         path: "build/Release/"
+
 
     - name: Compress artifacts
       uses: vimtor/action-zip@v1
