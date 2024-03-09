@@ -40,7 +40,7 @@ jobs:
     - name: Download base build
       shell: powershell
       run: |
-        Invoke-WebRequest -Method Get -Uri https://cavern.sbence.hu/index.php?t=115&dl=cavern64 -OutFile build/Release.zip -UseBasicParsing
+        Invoke-WebRequest -Method Get -Uri "https://cavern.sbence.hu/index.php?t=115&dl=cavern64" -OutFile build/Release.zip -UseBasicParsing
         7z x build/Release.zip
 
     - name: Collect artifacts
