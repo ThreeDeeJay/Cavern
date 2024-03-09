@@ -41,9 +41,9 @@ jobs:
       shell: powershell
       run: |
         Invoke-WebRequest -Method Get -Uri "https://cavern.sbence.hu/index.php?t=115&dl=cavern64" -OutFile cavern64.zip -UseBasicParsing
-        mkdir build
-        copy "cavern64.zip" "build/Release.zip"
-        7z x "build/Release.zip"
+        mkdir build/Release
+        7za x -obuild/Release cavern64.zip
+        Remove-Item -Path "cavern64.zip"
 
     - name: Collect artifacts
       working-directory: ${{env.GITHUB_WORKSPACE}}
