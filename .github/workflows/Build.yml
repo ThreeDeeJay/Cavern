@@ -56,14 +56,14 @@ jobs:
     - name: Upload a Build Artifact
       uses: actions/upload-artifact@v3.1.0
       with:
-        name: "cavern64"
+        name: "cavern64_${{steps.date.outputs.CurrentDate}}-${{steps.vars.outputs.ShortHash}}"
         path: "build/Release/"
 
     - name: Compress artifacts
       uses: vimtor/action-zip@v1
       with:
         files: "build/Release/"
-        dest: "build/cavern64_${{steps.date.outputs.CurrentDate}}-${{steps.vars.outputs.ShortHash}}.zip"
+        dest: "build/cavern64.zip"
 
     - name: GitHub pre-release
       uses: "marvinpinto/action-automatic-releases@latest"
