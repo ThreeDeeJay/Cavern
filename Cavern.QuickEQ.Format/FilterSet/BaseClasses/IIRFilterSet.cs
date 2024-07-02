@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
+using System.Text;
 
 using Cavern.Channels;
 using Cavern.Filters;
@@ -12,9 +12,9 @@ namespace Cavern.Format.FilterSet {
     /// </summary>
     public class IIRFilterSet : FilterSet {
         /// <summary>
-        /// All information needed for a channel.
+        /// All information needed for a channel filtered with IIR filters.
         /// </summary>
-        protected class IIRChannelData : ChannelData, IEquatable<IIRChannelData> {
+        public class IIRChannelData : ChannelData, IEquatable<IIRChannelData> {
             /// <summary>
             /// Applied filter set for the channel.
             /// </summary>
@@ -60,32 +60,17 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// An optional text to add to the first line of every exported channel filter set.
         /// </summary>
-        protected virtual string Header => null;
+        public string Header { get; set; }
 
         /// <summary>
         /// Construct a room correction with IIR filter sets for each channel for a room with the target number of channels.
         /// </summary>
-        public IIRFilterSet(int channels, int sampleRate) : base(sampleRate) {
-            Channels = new IIRChannelData[channels];
-            ReferenceChannel[] matrix = ChannelPrototype.GetStandardMatrix(channels);
-            for (int i = 0; i < matrix.Length; i++) {
-                Channels[i] = new IIRChannelData {
-                    reference = matrix[i]
-                };
-            }
-        }
+        public IIRFilterSet(int channels, int sampleRate) : base(sampleRate) => Initialize<IIRChannelData>(channels);
 
         /// <summary>
         /// Construct a room correction with IIR filter sets for each channel for a room with the target reference channels.
         /// </summary>
-        public IIRFilterSet(ReferenceChannel[] channels, int sampleRate) : base(sampleRate) {
-            Channels = new IIRChannelData[channels.Length];
-            for (int i = 0; i < channels.Length; i++) {
-                Channels[i] = new IIRChannelData {
-                    reference = channels[i]
-                };
-            }
-        }
+        public IIRFilterSet(ReferenceChannel[] channels, int sampleRate) : base(sampleRate) => Initialize<IIRChannelData>(channels);
 
         /// <summary>
         /// Convert the filter set to convolution impulse responses to be used with e.g. a <see cref="MultichannelConvolver"/>.
@@ -143,13 +128,8 @@ namespace Cavern.Format.FilterSet {
         public void SetupChannel(ReferenceChannel channel, BiquadFilter[] filters,
             double gain, int delaySamples, bool switchPolarity, string name) {
             for (int i = 0; i < Channels.Length; i++) {
-                IIRChannelData channelRef = (IIRChannelData)Channels[i];
-                if (channelRef.reference == channel) {
-                    channelRef.filters = filters;
-                    channelRef.gain = gain;
-                    channelRef.delaySamples = delaySamples;
-                    channelRef.switchPolarity = switchPolarity;
-                    channelRef.name = name;
+                if (Channels[i].reference == channel) {
+                    SetupChannel(i, filters, gain, delaySamples, switchPolarity, name);
                     return;
                 }
             }
@@ -174,15 +154,15 @@ namespace Cavern.Format.FilterSet {
                 for (int j = 0; j < filters.Length; j++) {
                     string freq;
                     if (filters[j].CenterFreq < 100) {
-                        freq = filters[j].CenterFreq.ToString("0.00");
+                        freq = filters[j].CenterFreq.ToString("0.00", Culture);
                     } else if (filters[j].CenterFreq < 1000) {
-                        freq = filters[j].CenterFreq.ToString("0.0");
+                        freq = filters[j].CenterFreq.ToString("0.0", Culture);
                     } else {
-                        freq = filters[j].CenterFreq.ToString("0");
+                        freq = filters[j].CenterFreq.ToString("0", Culture);
                     }
                     channelData.Add(string.Format("Filter {0,2}: ON  PK       Fc {1,7} Hz  Gain {2,6} dB  Q {3,6}",
-                        j + 1, freq, filters[j].Gain.ToString("0.00", CultureInfo.InvariantCulture),
-                        Math.Max(Math.Round(filters[j].Q * 4) / 4, .25).ToString("0.00", CultureInfo.InvariantCulture)));
+                        j + 1, freq, filters[j].Gain.ToString("0.00", Culture),
+                        Math.Max(Math.Round(filters[j].Q * 4) / 4, .25).ToString("0.00", Culture)));
                 }
                 for (int j = filters.Length; j < Bands;) {
                     channelData.Add($"Filter {++j}: OFF None");
@@ -192,15 +172,56 @@ namespace Cavern.Format.FilterSet {
         }
 
         /// <summary>
+        /// Export the filter set for manual per-band import, formatted as a single text to be displayed.
+        /// </summary>
+        public virtual string Export() => Export(false);
+
+        /// <summary>
+        /// Export the filter set for manual per-band import, formatted as a single text to be displayed.
+        /// </summary>
+        /// <param name="gainOnly">Don't export the Q factor - this is useful when they are all the same,
+        /// like for <see cref="Multiband31FilterSet"/></param>
+        protected virtual string Export(bool gainOnly) {
+            StringBuilder result = new StringBuilder("Set up the channels according to this configuration.").AppendLine();
+            for (int i = 0; i < Channels.Length; i++) {
+                IIRChannelData channelRef = (IIRChannelData)Channels[i];
+                result.AppendLine(string.Empty);
+                string chName = GetLabel(i);
+                result.AppendLine(chName);
+                result.AppendLine(new string('=', chName.Length));
+                RootFileExtension(i, result);
+                if (channelRef.delaySamples != 0) {
+                    result.AppendLine("Delay: " + GetDelay(i).ToString("0.00 ms", Culture));
+                }
+
+                BiquadFilter[] bands = channelRef.filters;
+                if (gainOnly) {
+                    for (int j = 0; j < bands.Length; j++) {
+                        result.AppendLine($"{bands[j].CenterFreq.ToString("0", Culture)} Hz:\t{bands[j].Gain.ToString("0.00", Culture)} dB");
+                    }
+                } else {
+                    for (int j = 0; j < bands.Length;) {
+                        BiquadFilter filter = bands[j];
+                        result.AppendLine($"Filter {++j}:").
+                            AppendLine($"- Frequency: {filter.CenterFreq.ToString("0", Culture)} Hz").
+                            AppendLine("- Q factor: " + filter.Q.ToString("0.00", Culture)).
+                            AppendLine($"- Gain: {filter.Gain.ToString("0.00", Culture)} dB");
+                    }
+                }
+            }
+            return result.ToString();
+        }
+
+        /// <summary>
         /// Add extra information for a channel that can't be part of the filter files to be written in the root file.
         /// </summary>
-        protected override void RootFileExtension(int channel, List<string> result) {
+        protected override void RootFileExtension(int channel, StringBuilder result) {
             IIRChannelData channelRef = (IIRChannelData)Channels[channel];
             if (channelRef.gain != 0) {
-                result.Add("Gain: " + channelRef.gain.ToString("0.00 dB"));
+                result.AppendLine("Gain: " + channelRef.gain.ToString("0.00 dB"));
             }
             if (channelRef.switchPolarity) {
-                result.Add("Switch polarity");
+                result.AppendLine("Switch polarity");
             }
         }
     }

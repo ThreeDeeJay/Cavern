@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 
 using Cavern.Utilities;
@@ -10,60 +11,90 @@ namespace Cavern.Filters {
     /// <remarks>This filter is using the overlap and add method using FFTs, with non-thread-safe caches.
     /// For a thread-safe fast convolver, use <see cref="ThreadSafeFastConvolver"/>. This filter is also
     /// only for a single channel, use <see cref="MultichannelConvolver"/> for multichannel signals.</remarks>
-    public partial class FastConvolver : Filter, IDisposable {
+    public partial class FastConvolver : Filter, IDisposable, ILocalizableToString {
+        /// <summary>
+        /// Get a clone of the <see cref="filter"/>'s impulse response.
+        /// </summary>
+        public float[] Impulse {
+            get => Measurements.GetRealPartHalf(filter.IFFT(cache)); // The setter doubles the length
+            protected set {
+                Dispose();
+                if (CavernAmp.Available && CavernAmp.IsMono()) { // CavernAmp only improves performance when the runtime has no SIMD
+                    native = CavernAmp.FastConvolver_Create(value, delay);
+                    return;
+                }
+                int fftSize = 2 << QMath.Log2Ceil(value.Length); // Zero padding for the falloff to have space
+                cache = CreateCache(fftSize);
+                filter = new Complex[fftSize];
+                for (int sample = 0; sample < value.Length; sample++) {
+                    filter[sample].Real = value[sample];
+                }
+                filter.InPlaceFFT(cache);
+                present = new Complex[fftSize];
+                Delay = delay;
+            }
+        }
+
+        /// <summary>
+        /// Number of samples in the impulse response.
+        /// </summary>
+        public int Length => filter.Length;
+
+        /// <summary>
+        /// Added filter delay to the impulse, in samples.
+        /// </summary>
+        public int Delay {
+            get => delay;
+            set {
+                future = new float[Length + value];
+                delay = value;
+            }
+        }
+
         /// <summary>
         /// CavernAmp instance of a FastConvolver.
         /// </summary>
-        readonly IntPtr native;
+        IntPtr native;
 
         /// <summary>
         /// Created convolution filter in Fourier-space.
         /// </summary>
-        readonly Complex[] filter;
+        Complex[] filter;
 
         /// <summary>
         /// Cache to perform the FFT in.
         /// </summary>
-        readonly Complex[] present;
+        Complex[] present;
 
         /// <summary>
         /// Overlap samples from previous runs.
         /// </summary>
-        readonly float[] future;
+        float[] future;
 
         /// <summary>
         /// FFT optimization.
         /// </summary>
-        readonly FFTCache cache;
+        FFTCache cache;
 
         /// <summary>
-        /// Delay applied with the convolution.
+        /// Added filter delay to the impulse, in samples.
         /// </summary>
-        readonly int delay;
+        int delay;
 
         /// <summary>
         /// Constructs an optimized convolution with no delay.
         /// </summary>
+        /// <param name="impulse">Impulse response of the desired filter</param>
         public FastConvolver(float[] impulse) : this(impulse, 0) { }
 
         /// <summary>
         /// Constructs an optimized convolution with added delay.
         /// </summary>
+        /// <param name="impulse">Impulse response of the desired filter</param>
+        /// <param name="delay">Added filter delay to the impulse, in samples</param>
         public FastConvolver(float[] impulse, int delay) {
-            if (CavernAmp.Available && CavernAmp.IsMono()) { // CavernAmp only improves performance when the runtime has no SIMD
-                native = CavernAmp.FastConvolver_Create(impulse, delay);
-                return;
-            }
-            int fftSize = 2 << QMath.Log2Ceil(impulse.Length); // Zero padding for the falloff to have space
-            cache = CreateCache(fftSize);
-            filter = new Complex[fftSize];
-            for (int sample = 0; sample < impulse.Length; sample++) {
-                filter[sample].Real = impulse[sample];
-            }
-            filter.InPlaceFFT(cache);
-            present = new Complex[fftSize];
-            future = new float[fftSize + delay];
             this.delay = delay;
+            Impulse = impulse;
         }
 
         /// <summary>
@@ -103,14 +134,28 @@ namespace Cavern.Filters {
             }
         }
 
+        /// <inheritdoc/>
+        public override object Clone() => new FastConvolver(Impulse, delay);
+
         /// <summary>
         /// Free up the native resources if they were used.
         /// </summary>
         public void Dispose() {
             if (native != IntPtr.Zero) {
                 CavernAmp.FastConvolver_Dispose(native);
+            } else {
+                cache?.Dispose();
             }
         }
+
+        /// <inheritdoc/>
+        public override string ToString() => "Convolution";
+
+        /// <inheritdoc/>
+        public virtual string ToString(CultureInfo culture) => culture.Name switch {
+            "hu-HU" => "Konvolúció",
+            _ => ToString()
+        };
 
         /// <summary>
         /// In case there are more input samples than the size of the filter, split it in parts.

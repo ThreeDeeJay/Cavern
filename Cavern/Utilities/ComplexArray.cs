@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Numerics;
 using System.Runtime.CompilerServices;
 
 namespace Cavern.Utilities {
@@ -64,6 +65,19 @@ namespace Cavern.Utilities {
         }
 
         /// <summary>
+        /// Take a linear-phase frequency response and convert it into a phase response.
+        /// </summary>
+        public static void ConvertToPhase(this Complex[] spectrum) {
+            int halfLength = spectrum.Length >> 1;
+            for (int i = 0; i < halfLength; i++) {
+                spectrum[i] = Complex.UnitPhase(spectrum[i].Real);
+            }
+            for (int i = halfLength; i < spectrum.Length; i++) {
+                spectrum[i] = new Complex(MathF.Cos(spectrum[i].Real), -MathF.Sin(spectrum[i].Real));
+            }
+        }
+
+        /// <summary>
         /// Replace the <paramref name="source"/> with its convolution with an <paramref name="other"/> array.
         /// </summary>
         public static unsafe void Convolve(this Complex[] source, Complex[] other) {
@@ -74,6 +88,7 @@ namespace Cavern.Utilities {
                     end = pSource + source.Length;
                 while (lhs != end) {
                     float oldReal = lhs->Real;
+                    // Don't try to further optimize this, System.Numerics classes don't have complex multiplication functions with floats
                     lhs->Real = lhs->Real * rhs->Real - lhs->Imaginary * rhs->Imaginary;
                     lhs->Imaginary = oldReal * rhs->Imaginary + lhs->Imaginary * rhs->Real;
                     lhs++;
@@ -92,6 +107,16 @@ namespace Cavern.Utilities {
                 source[i].Real = (source[i].Real * other[i].Real + source[i].Imaginary * other[i].Imaginary) * multiplier;
                 source[i].Imaginary = (source[i].Imaginary * other[i].Real - oldReal * other[i].Imaginary) * multiplier;
             }
+        }
+
+        /// <summary>
+        /// Take the first derivative of the <paramref name="source"/> in-place.
+        /// </summary>
+        public static void Derive(this Complex[] source) {
+            for (int i = 0, c = source.Length - 1; i < c; i++) {
+                source[i] = source[i + 1] - source[i];
+            }
+            source[^1] = source[^2];
         }
 
         /// <summary>
@@ -173,6 +198,15 @@ namespace Cavern.Utilities {
         public static void SetToDiracDelta(this Complex[] array) {
             for (int i = 0; i < array.Length; i++) {
                 array[i] = new Complex(1);
+            }
+        }
+
+        /// <summary>
+        /// Swap the real and imaginary planes.
+        /// </summary>
+        public static void SwapDimensions(this Complex[] array) {
+            for (int i = 0; i < array.Length; i++) {
+                (array[i].Real, array[i].Imaginary) = (array[i].Imaginary, array[i].Real);
             }
         }
     }

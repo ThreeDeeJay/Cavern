@@ -10,7 +10,8 @@ namespace Cavern.QuickEQ.Equalization {
         /// Add the two <see cref="Equalizer"/>s together.
         /// </summary>
         /// <remarks>Matching frequencies have to be guaranteed before calling this function with
-        /// <see cref="HasTheSameFrequenciesAs(Equalizer)"/>.</remarks>
+        /// <see cref="HasTheSameFrequenciesAs(Equalizer)"/>. For a safe version that allows different bands,
+        /// use <see cref="Merge(Equalizer)"/>.</remarks>
         public void AddCurve(Equalizer other) {
             List<Band> otherBands = other.bands;
             for (int i = 0, c = bands.Count; i < c; i++) {
@@ -38,6 +39,7 @@ namespace Cavern.QuickEQ.Equalization {
 
         /// <summary>
         /// Set this equalizer so if the <paramref name="other"/> is linear, this will be the difference from it.
+        /// This is calculated by LHS (this instance) - RHS (<paramref name="other"/>) for each value.
         /// </summary>
         /// <remarks>Matching frequencies have to be guaranteed before calling this function with
         /// <see cref="HasTheSameFrequenciesAs(Equalizer)"/>.</remarks>
@@ -148,13 +150,16 @@ namespace Cavern.QuickEQ.Equalization {
         /// <summary>
         /// Make sure the EQ won't go over the desired <paramref name="peak"/>.
         /// </summary>
-        public void LimitPeaks(double peak) => LimitPeaks(0, bands.Count, peak);
+        public void LimitPeaks(double peak) => LimitPeaks(0, bands.Count - 1, peak);
 
         /// <summary>
         /// Make sure the EQ won't go over the desired <paramref name="peak"/> between the frequency limits.
         /// </summary>
         public void LimitPeaks(double peak, double startFreq, double endFreq) {
             (int startBand, int endBand) = GetBandLimits(startFreq, endFreq);
+            if (startBand == -1 && endBand == -1) {
+                return; // The frequency range is not on the curve
+            }
             LimitPeaks(startBand, endBand, peak);
         }
 
@@ -273,7 +278,7 @@ namespace Cavern.QuickEQ.Equalization {
         }
 
         /// <summary>
-        /// Get the band index range corresponding to the selected frequency limits.
+        /// Get the band index range corresponding to the selected frequency limits (both inclusive).
         /// </summary>
         internal (int startBand, int endBand) GetBandLimits(double startFreq, double endFreq) {
             int first = GetFirstBand(startFreq);
@@ -323,9 +328,12 @@ namespace Cavern.QuickEQ.Equalization {
         /// <summary>
         /// Make sure the EQ won't go over the desired <paramref name="peak"/> between the band limits.
         /// </summary>
+        /// <param name="startBand">First band to limit (inclusive)</param>
+        /// <param name="endBand">Last band to limit (inclusive)</param>
+        /// <param name="peak">Maximum allowed value of the range set by <paramref name="startBand"/> and <paramref name="endBand"/></param>
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         void LimitPeaks(int startBand, int endBand, double peak) {
-            while (startBand < endBand) {
+            while (startBand <= endBand) {
                 if (bands[startBand].Gain > peak) {
                     bands[startBand] = new Band(bands[startBand].Frequency, peak);
                 }

@@ -1,6 +1,6 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
+using System.Text;
 
 using Cavern.Channels;
 using Cavern.Filters;
@@ -21,7 +21,7 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Required data for each exported channel.
         /// </summary>
-        protected class EqualizerChannelData : ChannelData, IEquatable<EqualizerChannelData> {
+        public class EqualizerChannelData : ChannelData, IEquatable<EqualizerChannelData> {
             /// <summary>
             /// Applied equalization filter for the channel, using which is resulting in the expected target response.
             /// </summary>
@@ -47,27 +47,19 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Construct a room correction with EQ curves for each channel for a room with the target number of channels.
         /// </summary>
-        public EqualizerFilterSet(int channels, int sampleRate) : base(sampleRate) {
-            Channels = new EqualizerChannelData[channels];
-            ReferenceChannel[] matrix = ChannelPrototype.GetStandardMatrix(channels);
-            for (int i = 0; i < matrix.Length; i++) {
-                Channels[i] = new EqualizerChannelData {
-                    reference = matrix[i]
-                };
-            }
-        }
+        public EqualizerFilterSet(int channels, int sampleRate) : base(sampleRate) => Initialize<EqualizerChannelData>(channels);
 
         /// <summary>
         /// Construct a room correction with EQ curves for each channel for a room with the target reference channels.
         /// </summary>
-        public EqualizerFilterSet(ReferenceChannel[] channels, int sampleRate) : base(sampleRate) {
-            Channels = new EqualizerChannelData[channels.Length];
-            for (int i = 0; i < channels.Length; i++) {
-                Channels[i] = new EqualizerChannelData {
-                    reference = channels[i]
-                };
-            }
-        }
+        public EqualizerFilterSet(ReferenceChannel[] channels, int sampleRate) : base(sampleRate) =>
+            Initialize<EqualizerChannelData>(channels);
+
+        /// <summary>
+        /// Construct an <see cref="EqualizerFilterSet"/> without the data of <see cref="Channels"/> pre-created.
+        /// This is useful when you also derive <see cref="EqualizerChannelData"/> and call <see cref="FilterSet.Initialize{T}(int)"/>.
+        /// </summary>
+        protected EqualizerFilterSet(int sampleRate) : base(sampleRate) { }
 
         /// <summary>
         /// Convert the filter set to convolution impulse responses to be used with e.g. a <see cref="MultichannelConvolver"/>.
@@ -134,7 +126,8 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Setup a channel's curve with additional gain/delay, and a custom name.
         /// </summary>
-        public void SetupChannel(ReferenceChannel channel, Equalizer curve, double gain, int delaySamples, bool switchPolarity, string name) {
+        public void SetupChannel(ReferenceChannel channel, Equalizer curve, double gain, int delaySamples,
+            bool switchPolarity, string name) {
             for (int i = 0; i < Channels.Length; ++i) {
                 if (Channels[i].reference == channel) {
                     EqualizerChannelData channelRef = (EqualizerChannelData)Channels[i];
@@ -157,17 +150,17 @@ namespace Cavern.Format.FilterSet {
             fileNameBase = fileNameBase[..fileNameBase.LastIndexOf('.')];
             for (int i = 0; i < Channels.Length; i++) {
                 EqualizerChannelData channelRef = (EqualizerChannelData)Channels[i];
-                channelRef.curve.Export(Path.Combine(folder, $"{fileNameBase} {Channels[i].name}.txt"), 0, optionalHeader);
+                channelRef.curve.Export(Path.Combine(folder, $"{fileNameBase} {Channels[i].name}.txt"), 0, optionalHeader, Culture);
             }
         }
 
         /// <summary>
         /// Add extra information for a channel that can't be part of the filter files to be written in the root file.
         /// </summary>
-        protected override void RootFileExtension(int channel, List<string> result) {
+        protected override void RootFileExtension(int channel, StringBuilder result) {
             EqualizerChannelData channelRef = (EqualizerChannelData)Channels[channel];
             if (channelRef.gain != 0) {
-                result.Add("Level: " + channelRef.gain.ToString("0.0 dB"));
+                result.AppendLine("Level: " + channelRef.gain.ToString("0.0 dB"));
             }
         }
     }

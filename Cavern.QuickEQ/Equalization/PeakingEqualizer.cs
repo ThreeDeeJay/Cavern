@@ -1,4 +1,8 @@
 ﻿using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 
 using Cavern.Filters;
 using Cavern.Filters.Utilities;
@@ -46,6 +50,23 @@ namespace Cavern.QuickEQ.Equalization {
         /// </summary>
         public int Iterations { get; set; } = 8;
 
+        /// <summary>
+        /// Some devices don't have the EQ bands spaced properly, or the generated bands have rounding errors.
+        /// Using the incorrect, but actually present frequencies is possible here by adding a set of frequency pairs
+        /// with the old being the generated/exported frequency, and the new being the frequency used by the device.
+        /// </summary>
+        /// <remarks>This only affects <see cref="GetPeakingEQ(int, double, double, int)"/> and
+        /// <see cref="GetPeakingEQ(int, double, double, int, bool)"/></remarks>
+        public (double oldFreq, double newFreq)[] FreqOverrides { get; set; }
+
+        /// <summary>
+        /// Number of output bands if <see cref="GetPeakingEQ(int)"/> is called. In that case, there will be one band for each input.
+        /// </summary>
+        public int Bands => source.Bands.Count;
+
+        /// <summary>
+        /// Input curve to approximate.
+        /// </summary>
         readonly Equalizer source;
 
         /// <summary>
@@ -58,12 +79,36 @@ namespace Cavern.QuickEQ.Equalization {
         /// </summary>
         double logMinFreq;
 
+        /// <summary>
+        /// Filter frequency response generator.
+        /// </summary>
         FilterAnalyzer analyzer;
 
         /// <summary>
         /// Generates peaking EQ filter sets that try to match <see cref="Equalizer"/> curves.
         /// </summary>
         public PeakingEqualizer(Equalizer source) => this.source = source;
+
+        /// <summary>
+        /// Parse a file created in the standard PEQ filter list format.
+        /// </summary>
+        public static PeakingEQ[] ParseEQFile(string path) => ParseEQFile(File.ReadLines(path));
+
+        /// <summary>
+        /// Parse a file created in the standard PEQ filter list format.
+        /// </summary>
+        public static PeakingEQ[] ParseEQFile(IEnumerable<string> lines) {
+            List<PeakingEQ> result = new List<PeakingEQ>();
+            foreach (string line in lines) {
+                string[] parts = line.Split(new[] { ':', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+                if (parts.Length > 11 && parts[0].ToLowerInvariant() == "filter" && parts[2].ToLowerInvariant() == "on" &&
+                    parts[3].ToLowerInvariant() == "pk" && QMath.TryParseDouble(parts[5], out double freq) &&
+                    QMath.TryParseDouble(parts[8], out double gain) && QMath.TryParseDouble(parts[11], out double q)) {
+                    result.Add(new PeakingEQ(Listener.DefaultSampleRate, freq, q, gain));
+                }
+            }
+            return result.ToArray();
+        }
 
         /// <summary>
         /// Create a peaking EQ filter set with bands placed at optimal frequencies to approximate the drawn EQ curve.
@@ -141,7 +186,18 @@ namespace Cavern.QuickEQ.Equalization {
         /// <summary>
         /// Create a peaking EQ filter set with constant bandwidth between the frequencies. This mimics legacy x-band EQs.
         /// </summary>
-        public PeakingEQ[] GetPeakingEQ(int sampleRate, double firstBand, int bandsPerOctave, int bands) {
+        public PeakingEQ[] GetPeakingEQ(int sampleRate, double firstBand, double bandsPerOctave, int bands) =>
+            GetPeakingEQ(sampleRate, firstBand, bandsPerOctave, bands, false);
+
+        /// <summary>
+        /// Create a peaking EQ filter set with constant bandwidth between the frequencies. This mimics legacy x-band EQs.
+        /// </summary>
+        /// <param name="sampleRate">Filter generation sample rate, if the filter would be used for playback/simulation after</param>
+        /// <param name="firstBand">Frequency of the first filter band</param>
+        /// <param name="bandsPerOctave">Gap between filter bands in octaves</param>
+        /// <param name="bands">Total number of output bands</param>
+        /// <param name="roundFrequencies">Round filter center frequencies to the first two digits, as it's done in some GEQs</param>
+        public PeakingEQ[] GetPeakingEQ(int sampleRate, double firstBand, double bandsPerOctave, int bands, bool roundFrequencies) {
             float[] target = source.Visualize(MinFrequency, MaxFrequency, 1024);
             PeakingEQ[] result = new PeakingEQ[bands];
             double bandwidth = 1.0 / bandsPerOctave;
@@ -149,6 +205,16 @@ namespace Cavern.QuickEQ.Equalization {
             analyzer = new FilterAnalyzer(null, sampleRate);
             for (int i = 0; i < bands; i++) {
                 double freq = firstBand * Math.Pow(2, i * bandwidth);
+                if (roundFrequencies) {
+                    int magnitude = (int)Math.Pow(10, Math.Floor(Math.Log10(freq)) - 1);
+                    freq = Math.Round(freq / magnitude) * magnitude;
+                }
+
+                double freqOverride;
+                if (FreqOverrides != null && (freqOverride = FreqOverrides.FirstOrDefault(x => x.oldFreq == freq).newFreq) != default) {
+                    freq = freqOverride;
+                }
+
                 result[i] = BruteForceGain(ref target, freq, q);
             }
             analyzer.Dispose();

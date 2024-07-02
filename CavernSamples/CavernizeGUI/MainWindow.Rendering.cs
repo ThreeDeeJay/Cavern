@@ -15,8 +15,9 @@ using Cavern.Utilities;
 using Cavern.Virtualizer;
 
 using CavernizeGUI.Elements;
-using Track = CavernizeGUI.Elements.Track;
 using CavernizeGUI.Resources;
+
+using Track = CavernizeGUI.Elements.Track;
 
 namespace CavernizeGUI {
     partial class MainWindow {
@@ -46,8 +47,9 @@ namespace CavernizeGUI {
                 throw new TrackException((string)language["FFOnl"]);
             }
 
-            ((RenderTarget)renderTarget.SelectedItem).Apply();
-            if (format.MaxChannels < Listener.Channels.Length) {
+            RenderTarget selectedRenderTarget = (RenderTarget)renderTarget.SelectedItem;
+            selectedRenderTarget.Apply();
+            if (selectedRenderTarget is not VirtualizerRenderTarget && format.MaxChannels < Listener.Channels.Length) {
                 throw new TrackException(string.Format((string)language["ChCnt"], Listener.Channels.Length, format.MaxChannels));
             }
 
@@ -72,6 +74,15 @@ namespace CavernizeGUI {
                 listener.SampleRate = roomCorrection == null ? target.SampleRate : roomCorrectionSampleRate;
             }
 
+            if (speakerVirtualizer.IsChecked) {
+                try {
+                    VirtualizerFilter.SetupForSpeakers();
+                } catch {
+                    throw new NonGroundChannelPresentException((string)language["SpViE"]);
+                }
+                listener.SampleRate = VirtualizerFilter.FilterSampleRate;
+            }
+
             listener.DetachAllSources();
             target.Attach(listener);
 
@@ -89,30 +100,22 @@ namespace CavernizeGUI {
             Codec codec = ((ExportFormat)audio.SelectedItem).Codec;
             BitDepth bits = codec == Codec.PCM_Float ? BitDepth.Float32 : force24Bit.IsChecked ? BitDepth.Int24 : BitDepth.Int16;
             if (!codec.IsEnvironmental()) {
-                blockSize = FiltersUsed ? roomCorrection[0].Length : defaultWriteCacheLength;
-                if (blockSize < listener.UpdateRate) {
-                    blockSize = listener.UpdateRate;
-                } else if (blockSize % listener.UpdateRate != 0) {
-                    // Cache handling is written to only handle when its size is divisible with the update rate - it's faster this way
-                    blockSize += listener.UpdateRate - blockSize % listener.UpdateRate;
-                }
-                blockSize *= Listener.HeadphoneVirtualizer ? VirtualizerFilter.VirtualChannels : Listener.Channels.Length;
-
-                string exportFormat = path[^4..].ToLower(CultureInfo.InvariantCulture);
+                SetBlockSize(activeRenderTarget);
+                string exportFormat = path[^4..].ToLowerInvariant();
                 bool mkvTarget = exportFormat.Equals(".mkv");
                 string exportName = mkvTarget ? path[..^4] + waveExtension : path;
+                int channelCount = activeRenderTarget.OutputChannels;
                 AudioWriter writer;
                 if (mkvTarget && target.Container == Container.Matroska && (codec == Codec.PCM_LE || codec == Codec.PCM_Float)) {
-                    AudioWriterIntoContainer container = new AudioWriterIntoContainer(path, target.GetVideoTracks(), codec,
-                        blockSize, Listener.Channels.Length, target.Length, target.SampleRate, bits) {
+                    writer = new AudioWriterIntoContainer(path, target.GetVideoTracks(), codec,
+                        blockSize, channelCount, target.Length, target.SampleRate, bits) {
                         NewTrackName = $"Cavern {activeRenderTarget.Name} render"
                     };
-                    writer = container;
                 } else if (exportFormat.Equals(waveExtension) && !wavChannelSkip.IsChecked) {
-                    writer = new RIFFWaveWriter(exportName, activeRenderTarget.Channels[..activeRenderTarget.OutputChannels],
+                    writer = new RIFFWaveWriter(exportName, activeRenderTarget.Channels[..channelCount],
                         target.Length, listener.SampleRate, bits);
                 } else {
-                    writer = AudioWriter.Create(exportName, activeRenderTarget.OutputChannels,
+                    writer = AudioWriter.Create(exportName, channelCount,
                         target.Length, listener.SampleRate, bits);
                 }
                 if (writer == null) {
@@ -142,7 +145,7 @@ namespace CavernizeGUI {
                                 staticObjects[i] = (staticChannels[i], allObjects[i]);
                             }
                         } else {
-                            staticObjects = Array.Empty<(ReferenceChannel, Source)>();
+                            staticObjects = [];
                         }
                         transcoder = new DolbyAtmosBWFWriter(path, listener, target.Length, bits, staticObjects);
                         break;
@@ -150,7 +153,7 @@ namespace CavernizeGUI {
                         Error((string)language["UnCod"]);
                         return null;
                 }
-                return () => TranscodeTask(target, transcoder);
+                return () => TranscodeTask(target, transcoder, path);
             }
         }
 
@@ -193,6 +196,7 @@ namespace CavernizeGUI {
                     }
                 }
             } else {
+                SetBlockSize((RenderTarget)renderTarget.SelectedItem);
                 try {
                     return () => RenderTask(target, null, false, false, null);
                 } catch (Exception e) {
@@ -201,6 +205,20 @@ namespace CavernizeGUI {
                 }
             }
             return null;
+        }
+
+        /// <summary>
+        /// Setup write cache block size depending on active settings.
+        /// </summary>
+        void SetBlockSize(RenderTarget target) {
+            blockSize = FiltersUsed ? roomCorrection[0].Length : defaultWriteCacheLength;
+            if (blockSize < listener.UpdateRate) {
+                blockSize = listener.UpdateRate;
+            } else if (blockSize % listener.UpdateRate != 0) {
+                // Cache handling is written to only handle when its size is divisible with the update rate - it's faster this way
+                blockSize += listener.UpdateRate - blockSize % listener.UpdateRate;
+            }
+            blockSize *= target.OutputChannels;
         }
 
         /// <summary>
@@ -239,7 +257,7 @@ namespace CavernizeGUI {
                     targetCodec += massivelyMultichannel;
                 }
 
-                if (writer is RIFFWaveWriter && finalName[^4..].ToLower(CultureInfo.InvariantCulture).Equals(".mkv")) {
+                if (writer is RIFFWaveWriter && finalName[^4..].ToLowerInvariant().Equals(".mkv")) {
                     string exportedAudio = finalName[..^4] + waveExtension;
                     taskEngine.UpdateStatus("Merging to final container...");
                     if (!ffmpeg.Launch(string.Format("-i \"{0}\" -i \"{1}\" -map 0:v? -map 1:a -map 0:s? -c:v copy -c:a {2} " +
@@ -260,13 +278,16 @@ namespace CavernizeGUI {
         /// <summary>
         /// Decode the source and export it to an object-based format.
         /// </summary>
-        void TranscodeTask(Track target, EnvironmentWriter writer) {
+        void TranscodeTask(Track target, EnvironmentWriter writer, string path) {
             taskEngine.Progress = 0;
             taskEngine.UpdateStatus((string)language["Start"]);
 
             RenderStats stats;
             if (writer is BroadcastWaveFormatWriter bwf) {
                 stats = WriteTranscode(target, bwf);
+                if (bwf is DolbyAtmosBWFWriter && new FileInfo(path).Length > 4L * 1024 * 1024 * 1024) {
+                    Dispatcher.Invoke(() => Error((string)language["Atm4G"]));
+                }
             } else {
                 stats = WriteTranscode(target, writer);
             }

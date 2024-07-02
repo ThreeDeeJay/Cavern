@@ -1,13 +1,23 @@
 ﻿using System;
+using System.ComponentModel;
 
 namespace Cavern.Filters {
     /// <summary>
     /// Separates ground and height data for a channel of a regular surround mix.
     /// </summary>
     public class Cavernize : Filter {
+        /// <inheritdoc/>
+        public override bool LinearTimeInvariant => false;
+
+        /// <summary>
+        /// Sample rate of the system this filter is used on.
+        /// </summary>
+        public int SampleRate => crossover.SampleRate;
+
         /// <summary>
         /// Height separation effect strength.
         /// </summary>
+        [DisplayName("Effect (ratio)")]
         public float Effect { get; set; } = .75f;
 
         /// <summary>
@@ -16,11 +26,13 @@ namespace Cavern.Filters {
         /// </summary>
         /// <remarks>The default value is calculated with 0.8 smoothness, with an update rate of 240 at
         /// 48 kHz sampling.</remarks>
+        [DisplayName("Smoothing factor (ratio)")]
         public float SmoothFactor { get; set; } = .0229349384f;
 
         /// <summary>
         /// Keep all frequencies below this on the ground.
         /// </summary>
+        [DisplayName("Ground crossover (Hz)")]
         public double GroundCrossover {
             get => crossover.Frequency;
             set => crossover.Frequency = value;
@@ -94,10 +106,7 @@ namespace Cavern.Filters {
             SmoothFactor =
                 1.001f - (updateRate + (crossover.SampleRate - updateRate) * MathF.Pow(smoothness, .1f)) / crossover.SampleRate;
 
-        /// <summary>
-        /// Cavernize an array of samples. One filter should be applied to only one continuous stream of samples.
-        /// </summary>
-        /// <param name="samples">Input samples</param>
+        /// <inheritdoc/>
         public override void Process(float[] samples) {
             crossover.Process(samples);
             float maxDepth = .0001f, maxHeight = .0001f, absHigh, absLow;
@@ -124,6 +133,9 @@ namespace Cavern.Filters {
             }
             Height = (maxHeight - Height) * SmoothFactor + Height;
         }
+
+        /// <inheritdoc/>
+        public override object Clone() => new Cavernize(SampleRate, (float)GroundCrossover);
 
         /// <summary>
         /// Create empty outputs for a given <paramref name="updateRate"/>> in case they are

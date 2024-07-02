@@ -176,14 +176,19 @@ namespace Cavern.QuickEQ.Equalization {
         /// <summary>
         /// Compares the two EQs if they have values at the same frequencies.
         /// </summary>
-        public bool HasTheSameFrequenciesAs(Equalizer other) {
+        public bool HasTheSameFrequenciesAs(Equalizer other) => HasTheSameFrequenciesAs(other, .0000001);
+
+        /// <summary>
+        /// Compares the two EQs if they have values at the same frequencies.
+        /// </summary>
+        public bool HasTheSameFrequenciesAs(Equalizer other, double maxError) {
             List<Band> otherBands = other.bands;
             int bandCount = bands.Count;
             if (bandCount != otherBands.Count) {
                 return false;
             }
             for (int i = 0; i < bandCount; i++) {
-                if (bands[i].Frequency != otherBands[i].Frequency) {
+                if (Math.Abs(bands[i].Frequency - otherBands[i].Frequency) > maxError) {
                     return false;
                 }
             }
@@ -212,6 +217,8 @@ namespace Cavern.QuickEQ.Equalization {
         /// <summary>
         /// Merge this Equalizer with another, summing their gains.
         /// </summary>
+        /// <remarks>For a faster version when both <see cref="Equalizer"/>s have the same bands, use
+        /// <see cref="AddCurve(Equalizer)"/> for optimization.</remarks>
         public Equalizer Merge(Equalizer with) {
             List<Band> output = new List<Band>();
             for (int band = 0, bandc = bands.Count; band < bandc; ++band) {

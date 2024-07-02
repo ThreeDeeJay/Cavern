@@ -69,10 +69,13 @@ namespace Cavern.Channels {
         public static ChannelPrototype FromStandardName(string name) {
             switch (name) {
                 case frontLeftMark:
+                case frontLeftMarkFull:
                     return FrontLeft;
                 case frontRightMark:
+                case frontRightMarkFull:
                     return FrontRight;
                 case frontCenterMark:
+                case frontCenterMarkFull:
                     return FrontCenter;
                 case screenLFEMark:
                 case subwooferMark:
@@ -118,7 +121,7 @@ namespace Cavern.Channels {
         /// </summary>
         public static ChannelPrototype[] Get(ReferenceChannel[] source) {
             ChannelPrototype[] result = new ChannelPrototype[source.Length];
-            for (int i = 0; i < source.Length; ++i) {
+            for (int i = 0; i < source.Length; i++) {
                 result[i] = Mapping[(int)source[i]];
             }
             return result;
@@ -129,7 +132,7 @@ namespace Cavern.Channels {
         /// </summary>
         public static ChannelPrototype[] GetAlternative(ReferenceChannel[] source) {
             ChannelPrototype[] result = new ChannelPrototype[source.Length];
-            for (int i = 0; i < source.Length; ++i) {
+            for (int i = 0; i < source.Length; i++) {
                 int index = (int)source[i];
                 ChannelPrototype old = Mapping[index];
                 Channel moved = new Channel(AlternativePositions[index], old.LFE);
@@ -147,7 +150,7 @@ namespace Cavern.Channels {
         /// </summary>
         public static string[] GetNames(ReferenceChannel[] source) {
             string[] result = new string[source.Length];
-            for (int i = 0; i < source.Length; ++i) {
+            for (int i = 0; i < source.Length; i++) {
                 result[i] = Mapping[(int)source[i]].Name;
             }
             return result;
@@ -239,7 +242,7 @@ namespace Cavern.Channels {
             ReferenceChannel[] matrix = database[subcount];
             if (subcount != count) {
                 Array.Resize(ref matrix, count);
-                for (int i = subcount; i < count; ++i) {
+                for (int i = subcount; i < count; i++) {
                     matrix[i] = ReferenceChannel.Unknown;
                 }
             }

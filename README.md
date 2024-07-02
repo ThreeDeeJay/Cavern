@@ -30,7 +30,7 @@ Cavernize.
   * Supported software/hardware for EQ/filter set export:
     * PC: Equalizer APO, CamillaDSP
     * DSP: MiniDSP 2x4 Advanced, MiniDSP 2x4 HD, MiniDSP DDRC-88A
-    * Processors: Emotiva, StormAudio
+    * Processors: Emotiva, StormAudio, Monolith HTP-1
     * Amplifiers: Behringer NX series
     * Others: Audyssey MultEQ-X, Dirac Live, YPAO
 * Direction and distance virtualization for headphones
@@ -141,7 +141,8 @@ To open any supported audio file for reading, use the following static function:
 ```
 AudioReader reader = AudioReader.Open(string path);
 ```
-After opening a file, the following workflows are available.
+There is an overload for `AudioReader.Open` to read audio files from an
+arbitrary `Stream`. After opening a file, the following workflows are available.
 
 ##### Getting all samples
 The `Read()` function of an `AudioReader` returns all samples from the file in
@@ -191,10 +192,9 @@ component browser, under audio, and they will automatically add all their Unity
 dependencies.
 
 ## Development documents
+* [Documentations of specific use-cases](./docs)
 * [Scripting API](http://cavern.sbence.hu/cavern/doc.php?if=api/index) with descriptions of all public members for all public classes
 * [Virtualizer repository](https://github.com/VoidXH/HRTF) which contains the raw IR measurements and detailed information about their use
-* [Limitless Audio Format](./docs/Limitless%20Audio%20Format.md) for storing Cavern mixes in a CPU-effective spatial format
-* [Cavern DCP channel order](./docs/Cavern%20DCP%20channel%20order.md) compared to DCP standards
 
 ## Disclaimers
 ### Code
@@ -214,16 +214,8 @@ downloaded from the [Cavern website](http://cavern.sbence.hu).
 
 ## Licence
 By downloading, using, copying, modifying, or compiling the source code or a
-build, you are accepting these terms. The source code, just like the compiled
-software, is given to you for free, but without any warranty. It is not
-guaranteed to work, and the developer is not responsible for any damages from
-the use of the software. You are allowed to make any modifications, and release
-them for free under this licence. If you release a modified version, you have to
-link this repository as its source. You are not allowed to sell any part of the
-original or the modified version. You are also not allowed to show
-advertisements in the modified software. The software must be named with a link
-to the creator (http://en.sbence.hu) when used in public (e.g. for screenings)
-or commercially (e.g. as an API in another software), also, the original
-creator's permission is required for public use (e.g. screening). If you include
-these code or any part of the original version in any other project, these terms
-still apply.
+build, you are accepting the licence [available here](LICENSE.md).
+
+This licence heavily discourages commercial usage. If you're not supporting the
+open source community with your work, you will need to contact the original
+author for a Cavern Pro licence through the Cavern website's contact form.

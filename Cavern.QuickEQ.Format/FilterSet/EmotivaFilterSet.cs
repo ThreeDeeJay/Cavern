@@ -14,7 +14,7 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Maximum number of peaking EQ filters per channel.
         /// </summary>
-        public override int Bands => 12;
+        public override int Bands => 11;
 
         /// <summary>
         /// Minimum gain of a single peaking EQ band in decibels.
@@ -83,6 +83,12 @@ namespace Cavern.Format.FilterSet {
             ReferenceChannel.RearRight => "rightBack",
             ReferenceChannel.SideLeft => "leftSurround",
             ReferenceChannel.SideRight => "rightSurround",
+            ReferenceChannel.TopFrontLeft => "leftFrontHeight",
+            ReferenceChannel.TopFrontRight => "rightFrontHeight",
+            ReferenceChannel.TopSideLeft => "leftMiddleHeight",
+            ReferenceChannel.TopSideRight => "rightMiddleHeight",
+            ReferenceChannel.TopRearLeft => "leftRearHeight",
+            ReferenceChannel.TopRearRight => "rightRearHeight",
             _ => base.GetLabel(channel)
         };
     }

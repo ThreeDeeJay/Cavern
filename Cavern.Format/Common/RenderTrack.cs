@@ -67,6 +67,11 @@ namespace Cavern.Format.Common {
         public void EncodeNextBlock(float[] samples) => encoder.WriteBlock(samples, 0, samples.Length);
 
         /// <summary>
+        /// Allows encoding a partial sample block.
+        /// </summary>
+        public void EncodeNextBlock(float[] samples, long from, long to) => encoder.WriteBlock(samples, from, to);
+
+        /// <summary>
         /// The following block of the track is rendered and available.
         /// </summary>
         public override bool IsNextBlockAvailable() => output.Position != 0;
@@ -79,7 +84,10 @@ namespace Cavern.Format.Common {
                 blockCache = new byte[output.Position];
             }
             output.Position = 0; // For reading
-            output.Read(blockCache);
+            int read = output.Read(blockCache);
+            if (read != blockCache.Length) {
+                throw new EndOfStreamException();
+            }
             output.Position = 0; // For overwriting
             blocksWritten++;
             return blockCache;

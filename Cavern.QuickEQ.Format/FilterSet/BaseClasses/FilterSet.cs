@@ -1,20 +1,22 @@
 ﻿using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
-using System.Linq;
+using System.Runtime.CompilerServices;
+using System.Text;
 
 using Cavern.Channels;
 using Cavern.Filters;
+using Cavern.Format.Common;
 
 namespace Cavern.Format.FilterSet {
     /// <summary>
     /// A filter set containing equalization info for each channel of a system.
     /// </summary>
-    public abstract class FilterSet {
+    public abstract class FilterSet : IExportable {
         /// <summary>
         /// Basic information needed for a channel.
         /// </summary>
-        protected abstract class ChannelData {
+        public abstract class ChannelData {
             /// <summary>
             /// The reference channel describing this channel or <see cref="ReferenceChannel.Unknown"/> if not applicable.
             /// </summary>
@@ -34,7 +36,7 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Applied filters for each channel in the configuration file.
         /// </summary>
-        protected ChannelData[] Channels { get; set; }
+        public ChannelData[] Channels { get; protected set; }
 
         /// <summary>
         /// Sample rate of the filter set.
@@ -47,8 +49,12 @@ namespace Cavern.Format.FilterSet {
         public int ChannelCount => Channels.Length;
 
         /// <summary>
-        /// Extension of the root file or the single-file export. This should be displayed on export dialogs.
+        /// Some targets use the user's culture in their exports. These targets should override this value with
+        /// the desired export culture, <see cref="CultureInfo.CurrentCulture"/> by default.
         /// </summary>
+        public CultureInfo Culture { get; protected set; } = CultureInfo.InvariantCulture;
+
+        /// <inheritdoc/>
         public virtual string FileExtension => "txt";
 
         /// <summary>
@@ -56,9 +62,7 @@ namespace Cavern.Format.FilterSet {
         /// </summary>
         protected FilterSet(int sampleRate) => SampleRate = sampleRate;
 
-        /// <summary>
-        /// Export the filter set to a target file.
-        /// </summary>
+        /// <inheritdoc/>
         public abstract void Export(string path);
 
         /// <summary>
@@ -72,6 +76,7 @@ namespace Cavern.Format.FilterSet {
         public static FilterSet Create(FilterSetTarget device, int channels, int sampleRate) {
             return device switch {
                 FilterSetTarget.Generic => new IIRFilterSet(channels, sampleRate),
+                FilterSetTarget.GenericConvolution => new FIRFilterSet(channels, sampleRate),
                 FilterSetTarget.GenericEqualizer => new EqualizerFilterSet(channels, sampleRate),
                 FilterSetTarget.EqualizerAPO_EQ => new EqualizerAPOEqualizerFilterSet(channels, sampleRate),
                 FilterSetTarget.EqualizerAPO_FIR => new EqualizerAPOFIRFilterSet(channels, sampleRate),
@@ -89,10 +94,15 @@ namespace Cavern.Format.FilterSet {
                 FilterSetTarget.BehringerNX => new BehringerNXFilterSet(channels, sampleRate),
                 FilterSetTarget.DiracLive => new DiracLiveFilterSet(channels, sampleRate),
                 FilterSetTarget.DiracLiveBassControl => new DiracLiveBassControlFilterSet(channels, sampleRate),
+                FilterSetTarget.DiracLiveBassControlCombined => new DiracLiveBassControlFilterSet(channels, sampleRate) {
+                    CombineHeights = true
+                },
                 FilterSetTarget.MultEQX => new MultEQXFilterSet(channels, sampleRate),
                 FilterSetTarget.MultEQXRaw => new MultEQXRawFilterSet(channels, sampleRate),
                 FilterSetTarget.MultEQXTarget => new MultEQXTargetFilterSet(channels, sampleRate),
                 FilterSetTarget.YPAO => new YPAOFilterSet(channels, sampleRate),
+                FilterSetTarget.YPAOLite => new YPAOLiteFilterSet(channels, sampleRate),
+                FilterSetTarget.Multiband31 => new Multiband31FilterSet(channels, sampleRate),
                 _ => throw new NotSupportedException()
             };
         }
@@ -103,6 +113,7 @@ namespace Cavern.Format.FilterSet {
         public static FilterSet Create(FilterSetTarget device, ReferenceChannel[] channels, int sampleRate) {
             return device switch {
                 FilterSetTarget.Generic => new IIRFilterSet(channels, sampleRate),
+                FilterSetTarget.GenericConvolution => new FIRFilterSet(channels, sampleRate),
                 FilterSetTarget.GenericEqualizer => new EqualizerFilterSet(channels, sampleRate),
                 FilterSetTarget.EqualizerAPO_EQ => new EqualizerAPOEqualizerFilterSet(channels, sampleRate),
                 FilterSetTarget.EqualizerAPO_FIR => new EqualizerAPOFIRFilterSet(channels, sampleRate),
@@ -120,10 +131,15 @@ namespace Cavern.Format.FilterSet {
                 FilterSetTarget.BehringerNX => new BehringerNXFilterSet(channels, sampleRate),
                 FilterSetTarget.DiracLive => new DiracLiveFilterSet(channels, sampleRate),
                 FilterSetTarget.DiracLiveBassControl => new DiracLiveBassControlFilterSet(channels, sampleRate),
+                FilterSetTarget.DiracLiveBassControlCombined => new DiracLiveBassControlFilterSet(channels, sampleRate) {
+                    CombineHeights = true
+                },
                 FilterSetTarget.MultEQX => new MultEQXFilterSet(channels, sampleRate),
                 FilterSetTarget.MultEQXRaw => new MultEQXRawFilterSet(channels, sampleRate),
                 FilterSetTarget.MultEQXTarget => new MultEQXTargetFilterSet(channels, sampleRate),
                 FilterSetTarget.YPAO => new YPAOFilterSet(channels, sampleRate),
+                FilterSetTarget.YPAOLite => new YPAOLiteFilterSet(channels, sampleRate),
+                FilterSetTarget.Multiband31 => new Multiband31FilterSet(channels, sampleRate),
                 _ => throw new NotSupportedException()
             };
         }
@@ -141,7 +157,34 @@ namespace Cavern.Format.FilterSet {
         /// <summary>
         /// Add extra information for a channel that can't be part of the filter files to be written in the root file.
         /// </summary>
-        protected virtual void RootFileExtension(int channel, List<string> result) { }
+        protected virtual void RootFileExtension(int channel, StringBuilder result) { }
+
+        /// <summary>
+        /// Initialize the data holders of <see cref="Channels"/> with the default <see cref="ReferenceChannel"/>s.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected void Initialize<T>(int channels) where T : ChannelData, new() {
+            Channels = new T[channels];
+            ReferenceChannel[] matrix = ChannelPrototype.GetStandardMatrix(channels);
+            for (int i = 0; i < channels; i++) {
+                Channels[i] = new T {
+                    reference = matrix[i]
+                };
+            }
+        }
+
+        /// <summary>
+        /// Initialize the data holders of <see cref="Channels"/> with the correct <see cref="ReferenceChannel"/>s.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        protected void Initialize<T>(ReferenceChannel[] channels) where T : ChannelData, new() {
+            Channels = new T[channels.Length];
+            for (int i = 0; i < channels.Length; i++) {
+                Channels[i] = new T {
+                    reference = channels[i]
+                };
+            }
+        }
 
         /// <summary>
         /// Get the delay for a given channel in milliseconds instead of samples.
@@ -154,25 +197,26 @@ namespace Cavern.Format.FilterSet {
         protected void CreateRootFile(string path, string filterFileExtension) {
             string fileNameBase = Path.GetFileName(path);
             fileNameBase = fileNameBase[..fileNameBase.LastIndexOf('.')];
-            List<string> result = new List<string>();
+            StringBuilder result = new StringBuilder();
             bool hasAnything = false,
                 hasDelays = false;
             for (int i = 0, c = Channels.Length; i < c; i++) {
-                result.Add(string.Empty);
-                result.Add("Channel: " + GetLabel(i));
+                result.AppendLine(string.Empty);
+                result.AppendLine("Channel: " + GetLabel(i));
                 if (Channels[i].delaySamples != 0) {
-                    result.Add("Delay: " + GetDelay(i).ToString("0.0 ms"));
+                    result.AppendLine("Delay: " + GetDelay(i).ToString("0.0 ms"));
                     hasAnything = true;
                     hasDelays = true;
                 }
-                int before = result.Count;
+                int before = result.Length;
                 RootFileExtension(i, result);
-                hasAnything |= result.Count != before;
+                hasAnything |= result.Length != before;
             }
             if (hasAnything) {
-                File.WriteAllLines(path, result.Prepend(hasDelays ?
+                File.WriteAllText(path, (hasDelays ?
                     $"Set up levels and delays by this file. Load \"{fileNameBase} <channel>.{filterFileExtension}\" files as EQ." :
-                    $"Set up levels by this file. Load \"{fileNameBase} <channel>.{filterFileExtension}\" files as EQ."));
+                    $"Set up levels by this file. Load \"{fileNameBase} <channel>.{filterFileExtension}\" files as EQ.") +
+                    result);
             }
         }
     }

@@ -7,6 +7,8 @@ rd /s /q Cavern.QuickEQ\bin
 rd /s /q Cavern.QuickEQ\obj
 rd /s /q Cavern.QuickEQ.Format\bin
 rd /s /q Cavern.QuickEQ.Format\obj
+rd /s /q Cavern.WPF\bin
+rd /s /q Cavern.WPF\obj
 rd /s /q "CavernUnity DLL\bin"
 rd /s /q "CavernUnity DLL\obj"
 rd /s /q "CavernUnity.WebGL\bin"
@@ -24,6 +26,8 @@ rd /s /q CavernSamples\EnhancedAC3Merger\bin
 rd /s /q CavernSamples\EnhancedAC3Merger\obj
 rd /s /q CavernSamples\EQAPOtoFIR\bin
 rd /s /q CavernSamples\EQAPOtoFIR\obj
+rd /s /q CavernSamples\FilterStudio\bin
+rd /s /q CavernSamples\FilterStudio\obj
 rd /s /q CavernSamples\HRTFSetImporter\bin
 rd /s /q CavernSamples\HRTFSetImporter\obj
 rd /s /q CavernSamples\QuickEQResultMerger\bin

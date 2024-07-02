@@ -108,29 +108,29 @@ namespace CavernizeGUI.Elements {
                 FormatHeader = Renderer.HasObjects ? (string)strings["ObTra"] : (string)strings["ChTra"];
             }
 
-            ReferenceChannel[] beds = Renderer != null ? Renderer.GetChannels() : Array.Empty<ReferenceChannel>();
+            ReferenceChannel[] beds = Renderer != null ? Renderer.GetChannels() : [];
             string bedList = string.Join(' ', ChannelPrototype.GetShortNames(beds));
-            List<(string, string)> builder = new();
+            List<(string, string)> builder = [];
             if (eac3 != null && eac3.HasObjects) {
                 builder.Add(((string)strings["SouCh"], $"{beds.Length} - {bedList}"));
                 string[] newBeds = ChannelPrototype.GetShortNames(eac3.GetStaticChannels());
                 builder.Add(((string)strings["MatBe"], $"{newBeds.Length} - {string.Join(' ', newBeds)}"));
                 builder.Add(((string)strings["MatOb"], eac3.DynamicObjects.ToString()));
             } else {
-                if (Renderer != null && beds.Length != Renderer.Objects.Count) {
+                if (Renderer != null && beds.Length != Renderer.Objects.Count) { // Generic object-based format: bed and object lines
                     if (beds.Length > 0) {
                         builder.Add(((string)strings["SouBe"], $"{beds.Length} - {bedList}"));
                     }
                     builder.Add(((string)strings["SouDy"], (Renderer.Objects.Count - beds.Length).ToString()));
-                } else if (beds.Length > 0) {
+                } else if (beds.Length > 0) { // Generic channel-based format of known channels
                     builder.Add(((string)strings["Chans"], $"{beds.Length} - {bedList}"));
-                } else {
-                    builder.Add(((string)strings["ChCnt"], reader.ChannelCount.ToString()));
+                } else { // Generic channel-based format of unknown channels
+                    builder.Add(((string)strings["Chans"], reader.ChannelCount.ToString()));
                 }
             }
             builder.Add(((string)strings["TraLe"], TimeSpan.FromSeconds(reader.Length / (double)reader.SampleRate).ToString()));
             builder.Add(((string)strings["TraFs"], reader.SampleRate + " Hz"));
-            Details = builder.ToArray();
+            Details = [.. builder];
         }
 
         /// <summary>
@@ -159,13 +159,13 @@ namespace CavernizeGUI.Elements {
                 RunningChannelSeparator separator = new RunningChannelSeparator(channels.Length) {
                     GetSamples = input => reader.ReadBlock(input, 0, input.Length)
                 };
-                upmixer.OnSamplesNeeded += updateRate => separator.Update(updateRate);
+                upmixer.OnSamplesNeeded = updateRate => separator.Update(updateRate);
 
                 listener.LFESeparation = channels.Contains(ReferenceChannel.ScreenLFE); // Apply crossover if LFE is not present
                 attachables = upmixer.IntermediateSources;
             } else {
                 listener.LFESeparation = true;
-                attachables = Renderer.Objects.ToArray();
+                attachables = [.. Renderer.Objects];
             }
 
             if (UpmixingSettings.Default.Cavernize && !Renderer.HasObjects) {
@@ -176,9 +176,7 @@ namespace CavernizeGUI.Elements {
                 attachables = cavernizer.IntermediateSources;
             }
 
-            for (int i = 0; i < attachables.Length; i++) {
-                listener.AttachSource(attachables[i]);
-            }
+            listener.AttachSources(attachables);
         }
 
         /// <summary>
@@ -209,7 +207,7 @@ namespace CavernizeGUI.Elements {
         public override string ToString() {
             ResourceDictionary strings = Consts.Language.GetTrackStrings();
             string codecName = (string)strings[Codec.ToString()] ??
-                (formatNames.ContainsKey(Codec) ? formatNames[Codec] : Codec.ToString());
+                (formatNames.TryGetValue(Codec, out string? value) ? value : Codec.ToString());
             string objects = Renderer != null && Renderer.HasObjects ? " " + strings["WiObj"] : string.Empty;
             return string.IsNullOrEmpty(Language) ? codecName : $"{codecName}{objects} ({Language})";
         }

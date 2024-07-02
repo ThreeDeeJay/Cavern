@@ -291,7 +291,7 @@ namespace Cavern {
                 try {
                     int savePos = 1;
                     Channels = new Channel[Convert.ToInt32(save[0])];
-                    for (int i = 0; i < Channels.Length; ++i) {
+                    for (int i = 0; i < Channels.Length; i++) {
                         Channels[i] = new Channel(QMath.ParseFloat(save[savePos++]), QMath.ParseFloat(save[savePos++]),
                             Convert.ToBoolean(save[savePos++]));
                     }
@@ -299,7 +299,7 @@ namespace Cavern {
                     EnvironmentSize = new Vector3(QMath.ParseFloat(save[savePos++]), QMath.ParseFloat(save[savePos++]),
                         QMath.ParseFloat(save[savePos++]));
                     HeadphoneVirtualizer = save.Length > savePos && Convert.ToBoolean(save[savePos++]); // Added: 2016.04.24.
-                    ++savePos; // Environment compensation (bool), added: 2017.06.18, removed: 2019.06.06.
+                    savePos++; // Environment compensation (bool), added: 2017.06.18, removed: 2019.06.06.
                 } catch {
                     Channels = ChannelPrototype.ToLayout(ChannelPrototype.GetStandardMatrix(6));
                     EnvironmentType = Environments.Home;
@@ -317,15 +317,15 @@ namespace Cavern {
                 return "Virtualization";
             } else {
                 int regular = 0, sub = 0, ceiling = 0, floor = 0;
-                for (int channel = 0; channel < Channels.Length; ++channel) {
+                for (int channel = 0; channel < Channels.Length; channel++) {
                     if (Channels[channel].LFE) {
-                        ++sub;
+                        sub++;
                     } else if (Channels[channel].X == 0) {
-                        ++regular;
+                        regular++;
                     } else if (Channels[channel].X < 0) {
-                        ++ceiling;
+                        ceiling++;
                     } else if (Channels[channel].X > 0) {
-                        ++floor;
+                        floor++;
                     }
                 }
                 StringBuilder layout = new StringBuilder(regular.ToString()).Append('.').Append(sub);
@@ -367,7 +367,7 @@ namespace Cavern {
         /// Recalculate the rendering environment.
         /// </summary>
         static void Recalculate() {
-            for (int channel = 0; channel < Channels.Length; ++channel) {
+            for (int channel = 0; channel < Channels.Length; channel++) {
                 Channels[channel].Recalculate();
             }
         }
@@ -381,6 +381,15 @@ namespace Cavern {
             }
             source.listenerNode = activeSources.AddLast(source);
             source.listener = this;
+        }
+
+        /// <summary>
+        /// Attach multiple sources to this listener.
+        /// </summary>
+        public void AttachSources(IEnumerable<Source> sources) {
+            foreach (Source source in sources) {
+                AttachSource(source);
+            }
         }
 
         /// <summary>
@@ -408,7 +417,7 @@ namespace Cavern {
         /// Detach all sources from this listener.
         /// </summary>
         public void DetachAllSources() {
-            for (int i = 0, c = activeSources.Count; i < c; ++i) {
+            for (int i = 0, c = activeSources.Count; i < c; i++) {
                 activeSources.First.Value.listener = null;
                 activeSources.RemoveFirst();
             }
@@ -428,13 +437,21 @@ namespace Cavern {
         }
 
         /// <summary>
-        /// Ask for update ticks.
+        /// Ask for update ticks for a single frame.
         /// </summary>
-        public float[] Render(int frames = 1) {
+        /// <remarks>The output size is <see cref="UpdateRate"/> * <see cref="Channels"/>.Length.</remarks>
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        public float[] Render() => Render(1);
+
+        /// <summary>
+        /// Ask for update ticks for multiple frames.
+        /// </summary>
+        /// <remarks>The output size is <paramref name="frames"/> * <see cref="UpdateRate"/> * <see cref="Channels"/>.Length.</remarks>
+        public float[] Render(int frames) {
             if (SampleRate < 44100 || UpdateRate < 16) { // Don't work with wrong settings
                 return null;
             }
-            for (int source = 0; source < sourceDistances.Length; ++source) {
+            for (int source = 0; source < sourceDistances.Length; source++) {
                 sourceDistances[source] = Range;
             }
             pulseDelta = frames * UpdateRate / (float)SampleRate;
@@ -458,7 +475,7 @@ namespace Cavern {
                 if (multiframeBuffer.Length != sampleCount) {
                     multiframeBuffer = new float[sampleCount];
                 }
-                for (int frame = 0; frame < frames; ++frame) {
+                for (int frame = 0; frame < frames; frame++) {
                     float[] frameBuffer = Frame();
                     Array.Copy(frameBuffer, 0, multiframeBuffer, frame * frameBuffer.Length, frameBuffer.Length);
                 }
@@ -478,7 +495,7 @@ namespace Cavern {
             lastUpdateRate = UpdateRate;
             renderBuffer = new float[channelCount * UpdateRate];
             lowpasses = new Lowpass[channelCount];
-            for (int i = 0; i < channelCount; ++i) {
+            for (int i = 0; i < channelCount; i++) {
                 lowpasses[i] = new Lowpass(SampleRate, 120);
             }
         }
@@ -507,12 +524,12 @@ namespace Cavern {
 
             // Mix sources to output
             Array.Clear(renderBuffer, 0, renderBuffer.Length);
-            for (int result = 0; result < results.Count; ++result) {
+            for (int result = 0; result < results.Count; result++) {
                 WaveformUtils.Mix(results[result], renderBuffer);
             }
 
             // Volume and subwoofers' lowpass
-            for (int channel = 0; channel < channelCount; ++channel) {
+            for (int channel = 0; channel < channelCount; channel++) {
                 if (Channels[channel].LFE) {
                     if (!DirectLFE) {
                         lowpasses[channel].Process(renderBuffer, channel, channelCount);
@@ -533,7 +550,7 @@ namespace Cavern {
         /// Version and creator information.
         /// </summary>
         /// <remarks>Hardcoded, because version reading is unsupported for .NET Standard projects</remarks>
-        const string info = "Cavern v2.0 by VoidX (cavern.sbence.hu)";
+        const string info = "Cavern v2.0.2 by VoidX (cavern.sbence.hu)";
 
         /// <summary>
         /// Default value of <see cref="MaximumSources"/>.

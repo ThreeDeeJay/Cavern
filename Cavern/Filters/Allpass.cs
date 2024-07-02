@@ -1,11 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using Cavern.Utilities;
+
 namespace Cavern.Filters {
     /// <summary>
     /// Simple first-order allpass filter.
     /// </summary>
     public class Allpass : PhaseSwappableBiquadFilter {
+        /// <inheritdoc/>
+        public override BiquadFilterType FilterType => BiquadFilterType.Allpass;
+
         /// <summary>
         /// Simple first-order allpass filter with maximum flatness and no additional gain.
         /// </summary>
@@ -30,6 +35,17 @@ namespace Cavern.Filters {
         /// <param name="gain">Gain of the filter in decibels</param>
         public Allpass(int sampleRate, double centerFreq, double q, double gain) : base(sampleRate, centerFreq, q, gain) { }
 
+        /// <summary>
+        /// Parse a Filter line of Equalizer APO which was split at spaces to a Cavern <see cref="Allpass"/> filter.<br />
+        /// Sample: ON AP Fc 100 Hz Q 10
+        /// </summary>
+        public static new Allpass FromEqualizerAPO(string[] splitLine, int sampleRate) {
+            if (QMath.TryParseDouble(splitLine[4], out double freq) && QMath.TryParseDouble(splitLine[7], out double q)) {
+                return new Allpass(sampleRate, freq, q);
+            }
+            throw new FormatException(nameof(splitLine));
+        }
+
         /// <inheritdoc/>
         public override object Clone() => new Allpass(SampleRate, centerFreq, q, gain);
 
@@ -44,13 +60,11 @@ namespace Cavern.Filters {
             if (phaseSwapped) {
                 divisor = 1 / (1 - alpha);
                 a2 = (1 + alpha) * divisor;
-                b0 = 1;
-                b2 = (float)Math.Pow(10, gain * .05f) * a2;
             } else {
                 a2 = (1 - alpha) * divisor;
-                b0 = (float)Math.Pow(10, gain * .05f) * a2;
-                b2 = 1;
             }
+            b0 = (float)Math.Pow(10, gain * .025f) * a2;
+            b2 = 1; // For APF, b2 = a0, and coefficients are divided by a0
             a1 = b1 = -2 * cosW0 * divisor;
         }
     }

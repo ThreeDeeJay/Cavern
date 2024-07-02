@@ -1,11 +1,17 @@
 ﻿using System;
 using System.Collections.Generic;
 
+using Cavern.Filters.Utilities;
+using Cavern.Utilities;
+
 namespace Cavern.Filters {
     /// <summary>
     /// Simple first-order notch filter.
     /// </summary>
     public class Notch : BiquadFilter {
+        /// <inheritdoc/>
+        public override BiquadFilterType FilterType => BiquadFilterType.Notch;
+
         /// <summary>
         /// Simple first-order notch filter with maximum flatness and no additional gain.
         /// </summary>
@@ -30,6 +36,22 @@ namespace Cavern.Filters {
         /// <param name="gain">Gain of the filter in decibels</param>
         public Notch(int sampleRate, double centerFreq, double q, double gain) : base(sampleRate, centerFreq, q, gain) { }
 
+        /// <summary>
+        /// Parse a Filter line of Equalizer APO which was split at spaces to a Cavern <see cref="Notch"/> filter.<br />
+        /// Sample with default Q-factor: Filter: ON NO Fc 100 Hz
+        /// Sample with custom Q-factor: Filter: ON NO Fc 100 Hz Q 30
+        /// </summary>
+        public static new Notch FromEqualizerAPO(string[] splitLine, int sampleRate) {
+            if (QMath.TryParseDouble(splitLine[4], out double freq)) {
+                if (splitLine.Length < 7) {
+                    return new Notch(sampleRate, freq, 30);
+                } else if (QMath.TryParseDouble(splitLine[7], out double q)) {
+                    return new Notch(sampleRate, freq, q);
+                }
+            }
+            throw new FormatException(nameof(splitLine));
+        }
+
         /// <inheritdoc/>
         public override object Clone() => new Notch(SampleRate, centerFreq, q, gain);
 
@@ -41,7 +63,7 @@ namespace Cavern.Filters {
 
         /// <inheritdoc/>
         protected override void Reset(float cosW0, float alpha, float divisor) {
-            b0 = (float)Math.Pow(10, gain * .05f) * divisor;
+            b0 = (float)Math.Pow(10, gain * .025f) * divisor;
             a1 = b1 = -2 * cosW0 * (b2 = divisor);
             a2 = (1 - alpha) * divisor;
         }

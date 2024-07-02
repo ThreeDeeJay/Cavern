@@ -26,7 +26,6 @@ using VoidX.WPF;
 
 using Path = System.IO.Path;
 using Track = CavernizeGUI.Elements.Track;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement.Window;
 
 namespace CavernizeGUI {
     public partial class MainWindow : Window {
@@ -68,7 +67,7 @@ namespace CavernizeGUI {
         /// <summary>
         /// Queued conversions.
         /// </summary>
-        readonly ObservableCollection<QueuedJob> jobs = new();
+        readonly ObservableCollection<QueuedJob> jobs = [];
 
         /// <summary>
         /// Runs the process in the background.
@@ -121,13 +120,13 @@ namespace CavernizeGUI {
                 [ReferenceChannel.TopRearCenter] = topRearCenter,
                 [ReferenceChannel.TopRearRight] = topRearRight
             };
-            trackInfo = new (TextBlock, TextBlock)[] {
+            trackInfo = [
                 (trackTable1Title, trackTable1Value),
                 (trackTable2Title, trackTable2Value),
                 (trackTable3Title, trackTable3Value),
                 (trackTable4Title, trackTable4Value),
                 (trackTable5Title, trackTable5Value)
-            };
+            ];
 
             audio.ItemsSource = ExportFormat.Formats;
             audio.SelectedIndex = Settings.Default.outputCodec;
@@ -151,6 +150,7 @@ namespace CavernizeGUI {
                 hrir.IsChecked = TryLoadHRIR(false);
             }
 
+            speakerVirtualizer.IsChecked = Settings.Default.speakerVirtualizer;
             force24Bit.IsChecked = Settings.Default.force24Bit;
             surroundSwap.IsChecked = Settings.Default.surroundSwap;
             wavChannelSkip.IsChecked = Settings.Default.wavChannelSkip;
@@ -164,8 +164,7 @@ namespace CavernizeGUI {
         /// <summary>
         /// Displays an error message.
         /// </summary>
-        static void Error(string message) =>
-            MessageBox.Show(message, (string)language["Error"], MessageBoxButton.OK, MessageBoxImage.Error);
+        static void Error(string message) => MessageBox.Show(message, (string)language["Error"], MessageBoxButton.OK, MessageBoxImage.Error);
 
         /// <summary>
         /// Perform one-time UI updates after the window is initialized and displayed.
@@ -248,6 +247,7 @@ namespace CavernizeGUI {
             Settings.Default.ffmpegLocation = ffmpeg.Location;
             Settings.Default.renderTarget = renderTarget.SelectedIndex - 3;
             Settings.Default.outputCodec = audio.SelectedIndex;
+            Settings.Default.speakerVirtualizer = speakerVirtualizer.IsChecked;
             Settings.Default.force24Bit = force24Bit.IsChecked;
             Settings.Default.checkUpdates = checkUpdates.IsChecked;
             if (settingChanged) {
@@ -337,9 +337,9 @@ namespace CavernizeGUI {
             }
 
             ReferenceChannel[] channels = selected.Channels;
-            for (int ch = 0; ch < channels.Length; ++ch) {
-                if (channelDisplay.ContainsKey(channels[ch]) && selected.IsExported(ch)) {
-                    channelDisplay[channels[ch]].Fill = green;
+            for (int ch = 0; ch < channels.Length; ch++) {
+                if (channelDisplay.TryGetValue(channels[ch], out Ellipse? value) && selected.IsExported(ch)) {
+                    value.Fill = green;
                 }
             }
         }
@@ -439,14 +439,14 @@ namespace CavernizeGUI {
         /// Start processing the queue.
         /// </summary>
         void StartQueue(object _, RoutedEventArgs e) {
-            QueuedJob[] jobsToRun = jobs.ToArray();
+            QueuedJob[] jobsToRun = [.. jobs];
             taskEngine.Run(() => QueueRunnerTask(jobsToRun));
         }
 
         void QueueDrop(object _, DragEventArgs e) {
             if (e.Data is DataObject obj && obj.ContainsFileDropList()) {
                 AudioFile oldFile = file;
-                List<string> invalids = new List<string>();
+                List<string> invalids = [];
                 StringCollection files = obj.GetFileDropList();
                 for (int i = 0, c = files.Count; i < c; i++) {
                     try {
@@ -456,7 +456,7 @@ namespace CavernizeGUI {
                         continue;
                     }
 
-                    var renderTask = GetRenderTask();
+                    Action renderTask = GetRenderTask();
                     if (renderTask != null) {
                         jobs.Add(new QueuedJob(file, (Track)tracks.SelectedItem, (RenderTarget)renderTarget.SelectedItem,
                             (ExportFormat)audio.SelectedItem, renderTask));

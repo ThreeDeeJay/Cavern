@@ -1,4 +1,5 @@
 ﻿using System;
+using System.ComponentModel;
 
 namespace Cavern.Filters {
     /// <summary>
@@ -13,6 +14,7 @@ namespace Cavern.Filters {
         /// <summary>
         /// Crossover frequency.
         /// </summary>
+        [DisplayName("Frequency (Hz)")]
         public double Frequency {
             get => lowpasses[0].CenterFreq;
             set {
@@ -27,6 +29,7 @@ namespace Cavern.Filters {
         /// </summary>
         /// <remarks>A value of 2 is recommended for notch prevention when mixing
         /// <see cref="LowOutput"/> and <see cref="HighOutput"/> back together.</remarks>
+        [DisplayName("Order")]
         public int Order {
             get => lowpasses.Length;
             set => RecreateFilters(lowpasses[0].CenterFreq, value);
@@ -90,12 +93,7 @@ namespace Cavern.Filters {
             HighOutput = new float[updateRate];
         }
 
-        /// <summary>
-        /// Apply crossover on an array of samples. One filter should be applied to only one continuous stream of samples.
-        /// </summary>
-        /// <param name="samples">Input samples</param>
-        /// <param name="channel">Channel to filter</param>
-        /// <param name="channels">Total channels</param>
+        /// <inheritdoc/>
         public override void Process(float[] samples, int channel, int channels) {
             int sampleCount = samples.Length;
             if (sampleCount != LowOutput.Length) {
@@ -135,5 +133,8 @@ namespace Cavern.Filters {
             lows = LowOutput;
             highs = HighOutput;
         }
+
+        /// <inheritdoc/>
+        public override object Clone() => new Crossover(SampleRate, Frequency, Order);
     }
 }

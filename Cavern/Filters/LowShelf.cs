@@ -2,12 +2,16 @@
 using System.Collections.Generic;
 
 using Cavern.Filters.Utilities;
+using Cavern.Utilities;
 
 namespace Cavern.Filters {
     /// <summary>
     /// Simple first-order low shelf filter.
     /// </summary>
     public class LowShelf : BiquadFilter {
+        /// <inheritdoc/>
+        public override BiquadFilterType FilterType => BiquadFilterType.LowShelf;
+
         /// <summary>
         /// Simple first-order low shelf filter with maximum flatness and no additional gain.
         /// </summary>
@@ -31,6 +35,22 @@ namespace Cavern.Filters {
         /// <param name="q">Q-factor of the filter</param>
         /// <param name="gain">Gain of the filter in decibels</param>
         public LowShelf(int sampleRate, double centerFreq, double q, double gain) : base(sampleRate, centerFreq, q, gain) { }
+
+        /// <summary>
+        /// Parse a Filter line of Equalizer APO which was split at spaces to a Cavern <see cref="LowShelf"/> filter.<br />
+        /// Sample with fixed shelf: Filter: ON LS Fc 100 Hz Gain 0 dB
+        /// Sample with custom shelf: Filter: ON LSC 12 dB Fc 100 Hz Gain 0 dB
+        /// </summary>
+        public static new LowShelf FromEqualizerAPO(string[] splitLine, int sampleRate) {
+            string type = splitLine[2].ToLowerInvariant();
+            if (type == "ls" && QMath.TryParseDouble(splitLine[4], out double freq) && QMath.TryParseDouble(splitLine[5], out double gain)) {
+                return new LowShelf(sampleRate, freq, QFactor.FromSlope(0.9, gain));
+            } else if (type == "lsc" && QMath.TryParseDouble(splitLine[3], out double slope) &&
+                QMath.TryParseDouble(splitLine[6], out freq) && QMath.TryParseDouble(splitLine[9], out gain)) {
+                return new LowShelf(sampleRate, freq, QFactor.FromSlopeDecibels(slope, gain), gain);
+            }
+            throw new FormatException(nameof(splitLine));
+        }
 
         /// <inheritdoc/>
         public override object Clone() => new LowShelf(SampleRate, centerFreq, q, gain);
